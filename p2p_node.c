@@ -16,6 +16,16 @@ pthread_mutex_t peers_mutex;
 // Direct TCP P2P connection
 // Real-time messaging and multi=peer broadcasting
 
+// Current to-do:
+// Look into the code more clearly to possible detect fault logic
+
+// Further lookinto:
+// - Test if we can prevent message loop
+// - If not, message identity + memory so that each message is processed once
+
+
+
+
 // Add peer safely
 void add_peer(int sock) {
     pthread_mutex_lock(&peers_mutex);
