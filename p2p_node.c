@@ -20,7 +20,9 @@ pthread_mutex_t peers_mutex;
 // Look into the code more clearly to possible detect fault logic
 
 // Further lookinto:
-// - Test if we can prevent message loop
+// - Test if we can prevent message loop: 
+    // + Since now nodes are connected as a tree base network 5000->5001->5002-> there is no loop. 
+    // + When we run same port(connected to a same port), it still runs(can run ./node 5001 127.0.0.1 5000 in 2 terminals without conflict) -> Check if bind() is silently failing
 // - If not, message identity + memory so that each message is processed once
 
 

@@ -12,7 +12,7 @@ The following diagram illustrates how the main() function initializes the core t
 
 ![Thread Hierarchy and Data Flow](p2p.drawio.svg)
 
-## 2. How to test
+## How to test
 
 ### Compile 
 
