@@ -7,6 +7,11 @@ Simple p2p system with each node:
 
 ---
 
+## Network Topology
+The following diagram illustrates how the main() function initializes the core threads and how those threads subsequently spawn peer handlers 
+
+![Thread Hierarchy and Data Flow](p2p.drawio.svg)
+
 ## 2. How to test
 
 ### Compile 
