@@ -26,7 +26,6 @@ gcc p2p_node.c -o node -pthread
 ./node 5000
 ```
 ### Terminal 2
-
 ```bash
 ./node 5001 127.0.0.1 5000
 ```
