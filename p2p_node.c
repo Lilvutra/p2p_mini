@@ -15,7 +15,7 @@ int peer_count = 0;  // number of peers
 pthread_mutex_t peers_mutex; // protects access
 
 // Direct TCP P2P connection
-// Real-time messaging and multi=peer broadcasting
+// Real-time messaging and multi-peer broadcasting
 
 // Current to-do:
 // Look into the code more clearly to possible detect fault logic
@@ -78,24 +78,52 @@ void* handle_peer(void *arg) { // each connection gets 1 thread
     free(arg);
 
     char buffer[BUFFER_SIZE];
+    char temp_buffer[BUFFER_SIZE]; // temp storage to store message chunk
+    int buffer_len = 0; // number of bytes currently in buffer
 
     while (1) {
-        int bytes = recv(sock, buffer, BUFFER_SIZE - 1, 0); // wait for incomming message
-
-        if (bytes <= 0) {
-            printf("Peer disconnected\n");
-            close(sock);
-            remove_peer(sock);
-            break;
+        // receive temp_buffer
+        int temp_bytes = recv(sock, temp_buffer, BUFFER_SIZE - 1, 0); // get incoming message
+        if (temp_bytes <= 0) {
+                printf("Peer disconnected\n");
+                close(sock);
+                remove_peer(sock);
+                break;
+        }
+        if (buffer_len + temp_bytes >= BUFFER_SIZE) {
+            printf("Buffer overflow, resetting...");
+            buffer_len = 0;
+            continue;
         }
 
-        buffer[bytes] = '\0'; // convert message to string
-        printf("Received: %s", buffer);
+        // append temp_buffer to buffer
+        memcpy(buffer + buffer_len, temp_buffer, temp_bytes);  // (dest, src, size)
+        buffer_len += temp_bytes;
+        buffer[buffer_len] = '\0';  // null terminator
 
-        // forward message to others
-        broadcast(buffer, sock);
+        // while buffer contains '\n': extract 1 message, process it , remove it from buffer
+        while (strchr(buffer, '\n')){
+            char *newline = strchr(buffer, '\n'); // address of '\n' inside buffer
+            int msg_len = newline - buffer;  // (address of newline) - (start of buffer)
+            
+            // Extract message
+            char message[BUFFER_SIZE];
+            memcpy(message, buffer, msg_len);  // (dest, src, size) - copy 'size' bytes from "src" to "dest"
+            message[msg_len] = '\0';
+
+            // Print
+            printf("Received: %s\n", message);
+            // forward message to others
+            broadcast(buffer, sock);
+
+            // Remove processed message from buffer
+            int remaining = buffer_len - (msg_len + 1);
+            memmove(buffer, newline + 1, remaining);
+
+            buffer_len = remaining;
+            buffer[buffer_len] = '\0';
+        }
     }
-
     return NULL;
 }
 
