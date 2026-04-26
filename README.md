@@ -44,3 +44,15 @@ e.g:
 hello world 
 ```
 
+## Test with netcat
+Clean the test environment
+```bash
+pkill node
+```
+
+Run the test
+```bash
+chmod +x test1.sh
+./test1.sh
+```
+
