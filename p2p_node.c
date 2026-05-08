@@ -9,7 +9,13 @@
 #define BUFFER_SIZE 1024
 
 // Shared memory
-int peers[MAX_PEERS]; // list of connected sockets
+typedef struct {
+    int sock;
+    char ip[INET_ADDRSTRLEN];
+    int port;
+}Peer;
+Peer peers[MAX_PEERS]; // list of connected sockets
+
 int peer_count = 0;  // number of peers
 
 pthread_mutex_t peers_mutex; // protects access
@@ -30,11 +36,14 @@ pthread_mutex_t peers_mutex; // protects access
 
 
 // Add peer safely
-void add_peer(int sock) {
+void add_peer(int sock, char *ip, int port) {
     pthread_mutex_lock(&peers_mutex);
 
     if (peer_count < MAX_PEERS) {
-        peers[peer_count++] = sock;
+        peers[peer_count].sock = sock;
+        peers[peer_count].port = port;
+        strcpy(peers[peer_count].ip, ip);
+        peer_count++;
         printf("New peer added. Total: %d\n", peer_count);
     }
 
@@ -46,8 +55,8 @@ void remove_peer(int sock) {
     pthread_mutex_lock(&peers_mutex);
 
     for (int i = 0; i < peer_count; i++) {
-        if (peers[i] == sock) {
-            peers[i] = peers[peer_count - 1];
+        if (peers[i].sock == sock) {
+            peers[i] = peers[peer_count-1];
             peer_count--;
             break;
         }
@@ -62,7 +71,7 @@ void broadcast(char *msg, int sender_sock) {
     pthread_mutex_lock(&peers_mutex);
 
     for (int i = 0; i < peer_count; i++) {
-        int sock = peers[i];
+        int sock = peers[i].sock;
 
         if (sock != sender_sock) { // except sender
             send(sock, msg, strlen(msg), 0); // send raw message
@@ -114,7 +123,7 @@ void* handle_peer(void *arg) { // each connection gets 1 thread
             // Print
             printf("Received: %s\n", message);
             // forward message to others
-            broadcast(buffer, sock);
+            broadcast(message, sock);: check again buffer should be message?
 
             // Remove processed message from buffer
             int remaining = buffer_len - (msg_len + 1);
@@ -132,11 +141,16 @@ void* server_thread(void *arg) {
     int server_fd = *(int*)arg; // get server socket
 
     while (1) {
-        int client_fd = accept(server_fd, NULL, NULL); // accept connection
+        struct sockaddr_in client_addr;
+        socklen_t addr_len = sizeof(client_addr);
+        int client_fd = accept(server_fd, (struct sockaddr*)&client_addr, &addr_len); // accept connection
 
         if (client_fd < 0) continue;
 
-        add_peer(client_fd);
+        char client_ip[INET_ADDRSTRLEN];
+        inet_ntop(AF_INET, &client_addr.sin_addr, client_ip, INET_ADDRSTRLEN); // extract ip
+        int client_port = ntohs(client_addr.sin_port); // extract port
+        add_peer(client_fd, client_ip, client_port);
 
         pthread_t tid;
         int *pclient = malloc(sizeof(int));
@@ -171,7 +185,7 @@ void connect_to_peer(char *ip, int port) {
     if (connect(sock, (struct sockaddr*)&addr, sizeof(addr)) == 0) {
         printf("Connected to peer %s:%d\n", ip, port);
 
-        add_peer(sock);
+        add_peer(sock, ip, port);
 
         pthread_t tid;
         int *psock = malloc(sizeof(int));
