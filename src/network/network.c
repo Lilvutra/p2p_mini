@@ -10,6 +10,66 @@
 #include <sys/socket.h>
 #include <stdio.h>
 
+// Connect to another peer
+void connect_to_peer(char *ip, int port) {
+    int sock = socket(AF_INET, SOCK_STREAM, 0); // create socket
+
+    // set up address
+    struct sockaddr_in addr;
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(port);
+    inet_pton(AF_INET, ip, &addr.sin_addr);
+
+    if (connect(sock, (struct sockaddr*)&addr, sizeof(addr)) == 0) {
+        printf("Connected to peer %s:%d\n", ip, port);
+
+        add_peer(sock, ip, port);
+
+        pthread_t tid;
+        int *psock = malloc(sizeof(int));
+        *psock = sock;
+
+        pthread_create(&tid, NULL, handle_peer, psock);
+        pthread_detach(tid);
+        // Hello handshake
+        char hello[32];
+        snprintf(hello, sizeof(hello), "Hello:%d\n", my_port);
+        send(sock, hello, strlen(hello), 0);
+        send(sock,"/known_hosts\n", 13, 0); // send known_hosts to peer
+    } else {
+        perror("Connect failed");
+        close(sock);
+    }
+}
+
+void parse_n_connect (char *payload) {
+    //printf("[debug] parse_n_connect called with : %s\n", payload);
+    char copy[BUFFER_SIZE];
+    strncpy(copy, payload, BUFFER_SIZE);
+
+    char *token = strtok(copy, ",");
+    while (token != NULL) {
+        //printf("[debug] token: %s\n", token);
+        char *colon = strchr(token, ':');
+        if (colon == NULL) {
+            printf("[debug] no colon found, skipping\n");
+            token = strtok(NULL, ",");
+            continue;
+        }
+        *colon = '\0';
+        // ip:port
+        char *ip = token;
+        int port = atoi(colon+1);
+
+        //printf("[debug] ip=%s port=%d\n", ip, port);
+        //printf("[debug] already_connected=%d\n", already_connected(ip, port));
+
+        if (already_connected(ip, port) != 1) {
+            connect_to_peer(ip, port);
+        }
+        token = strtok(NULL, ",");
+    }
+}
 
 // Handle incoming messages
 void* handle_peer(void *arg) { // each connection gets 1 thread
@@ -61,8 +121,14 @@ void* handle_peer(void *arg) { // each connection gets 1 thread
                 int their_port = atoi(message +6);
                 //update this peer's port in peers[]
                 update_peer_port(sock, their_port);
+            } else if(strncmp(message, "HOSTS:", 6) == 0){
+                parse_n_connect(message+6); // skip 6 character to get the hosts number only
             }
             else {
+                //char outgoing[BUFFER_SIZE];
+                //snprintf(outgoing, sizeof(outgoing), "%s\n", message);
+                //printf("MESSAGE FINAL: %s\n", message);
+                //broadcast(outgoing, sock);
                 broadcast(message, sock);
             }
             // Remove processed message from buffer
@@ -110,34 +176,4 @@ void* input_thread(void *arg) {
     }
 
     return NULL;
-}
-
-// Connect to another peer
-void connect_to_peer(char *ip, int port) {
-    int sock = socket(AF_INET, SOCK_STREAM, 0); // create socket
-
-    // set up address
-    struct sockaddr_in addr;
-    addr.sin_family = AF_INET;
-    addr.sin_port = htons(port);
-    inet_pton(AF_INET, ip, &addr.sin_addr);
-
-    if (connect(sock, (struct sockaddr*)&addr, sizeof(addr)) == 0) {
-        printf("Connected to peer %s:%d\n", ip, port);
-
-        add_peer(sock, ip, port);
-
-        pthread_t tid;
-        int *psock = malloc(sizeof(int));
-        *psock = sock;
-
-        pthread_create(&tid, NULL, handle_peer, psock);
-        pthread_detach(tid);
-        char hello[32];
-        snprintf(hello, sizeof(hello), "Hello:%d\n", my_port);
-        send(sock, hello, strlen(hello), 0);
-    } else {
-        perror("Connect failed");
-        close(sock);
-    }
 }

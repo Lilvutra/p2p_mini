@@ -16,6 +16,7 @@
 
 // MAIN
 int main(int argc, char *argv[]) {
+    // setbuf(stdout, NULL);
     if (argc < 2) {
         printf("Usage: %s <port> [peer_ip peer_port]\n", argv[0]);
         return 1;

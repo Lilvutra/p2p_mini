@@ -19,5 +19,6 @@ extern pthread_mutex_t peers_mutex;
 void add_peer(int sock, char *ip, int port);
 void remove_peer(int sock);
 void update_peer_port(int sock, int new_port);
+int already_connected(char *ip, int port);
 
 #endif

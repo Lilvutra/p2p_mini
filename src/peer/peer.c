@@ -47,3 +47,18 @@ void update_peer_port (int sock, int new_port) {
     }
     pthread_mutex_unlock(&peers_mutex);
 }
+
+// Check already connected - avoid duplicate connection
+int already_connected(char *ip, int port) {
+    pthread_mutex_lock(&peers_mutex);
+    // loop through peers
+    for (int i=0; i< peer_count; i++) {
+        // compare each peer ip 
+        if (strcmp(peers[i].ip, ip) ==0 && peers[i].port == port) {
+            pthread_mutex_unlock(&peers_mutex);
+            return 1; // found
+        }
+    }
+    pthread_mutex_unlock(&peers_mutex);
+    return 0; //not found
+}

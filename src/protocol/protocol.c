@@ -1,11 +1,13 @@
 #include "protocol.h"
 #include "../peer/peer.h"
+#include "../network/network.h"
 
 #include <string.h>
 #include <unistd.h>
 #include <stdio.h>
 #include <sys/socket.h>
 #include <pthread.h>
+#include <stdlib.h>
 
 
 // Broadcast message to all peers
@@ -26,7 +28,7 @@ void broadcast(char *msg, int sender_sock) {
 // Handle known hosts
 void handle_known_hosts(int requester_sock){
     char response[MAX_PEERS * (INET_ADDRSTRLEN+6)];
-    response[0] = '\0';
+    strcpy(response, "HOSTS:");
 
     pthread_mutex_lock(&peers_mutex);
 
