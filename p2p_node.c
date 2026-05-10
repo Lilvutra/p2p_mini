@@ -17,6 +17,7 @@ typedef struct {
 Peer peers[MAX_PEERS]; // list of connected sockets
 
 int peer_count = 0;  // number of peers
+int my_port;
 
 pthread_mutex_t peers_mutex; // protects access
 
@@ -81,6 +82,38 @@ void broadcast(char *msg, int sender_sock) {
     pthread_mutex_unlock(&peers_mutex);
 }
 
+// Handle known hosts
+void handle_known_hosts(int requester_sock){
+    char response[MAX_PEERS * (INET_ADDRSTRLEN+6)];
+    response[0] = '\0';
+
+    pthread_mutex_lock(&peers_mutex);
+
+    // loop through each known_hosts
+    for (int i = 0; i< peer_count; i++){
+        if (peers[i].sock != requester_sock) {
+            // build ip:port then append to response
+            char entry[INET_ADDRSTRLEN+6];
+            snprintf(entry, sizeof(entry), "%s:%d,",peers[i].ip, peers[i].port );
+            strcat(response, entry);
+        }
+    }
+    pthread_mutex_unlock(&peers_mutex);
+    strcat(response, "\n");
+    send(requester_sock, response, strlen(response), 0);
+}
+
+void update_peer_port (int sock, int new_port) {
+    pthread_mutex_lock(&peers_mutex);
+    for (int i = 0; i < peer_count; i++) {
+        if (peers[i].sock == sock ){
+            peers[i].port = new_port;
+            break;
+        }
+    }
+    pthread_mutex_unlock(&peers_mutex);
+}
+
 // Handle incoming messages
 void* handle_peer(void *arg) { // each connection gets 1 thread
     int sock = *(int*)arg; // extract socket
@@ -123,8 +156,18 @@ void* handle_peer(void *arg) { // each connection gets 1 thread
             // Print
             printf("Received: %s\n", message);
             // forward message to others
-            broadcast(message, sock);: check again buffer should be message?
-
+            if (strncmp(message, "/known_hosts", 12) == 0) {
+                handle_known_hosts(sock);
+                //printf("known_hosts requested \n");
+            } else if(strncmp(message, "Hello:", 6) == 0){
+                // extract port number from "Hello:5001"
+                int their_port = atoi(message +6);
+                //update this peer's port in peers[]
+                update_peer_port(sock, their_port);
+            }
+            else {
+                broadcast(message, sock);
+            }
             // Remove processed message from buffer
             int remaining = buffer_len - (msg_len + 1);
             memmove(buffer, newline + 1, remaining);
@@ -193,6 +236,9 @@ void connect_to_peer(char *ip, int port) {
 
         pthread_create(&tid, NULL, handle_peer, psock);
         pthread_detach(tid);
+        char hello[32];
+        snprintf(hello, sizeof(hello), "Hello:%d\n", my_port);
+        send(sock, hello, strlen(hello), 0);
     } else {
         perror("Connect failed");
         close(sock);
@@ -207,6 +253,7 @@ int main(int argc, char *argv[]) {
     }
 
     int port = atoi(argv[1]);
+    my_port = port;
 
     pthread_mutex_init(&peers_mutex, NULL);
 
