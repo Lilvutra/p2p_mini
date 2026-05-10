@@ -2,17 +2,17 @@ echo "test3: test /known_hosts for 3 nodes"
 echo "expected (from 5000 we get): 127.0.0.1:5001,127.0.0.1:5002,"
 
 # node A
-./node 5000 &
+./build/node 5000 &
 A=$!
 sleep 0.5
 
 # node B
-./node 5001 127.0.0.1 5000 &
+./build/node 5001 127.0.0.1 5000 &
 B=$!
 sleep 1
 
 # node c
-./node 5002 127.0.0.1 5000 &
+./build/node 5002 127.0.0.1 5000 &
 C=$!
 sleep 1.5
 

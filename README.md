@@ -10,30 +10,78 @@ Simple p2p system with each node:
 ## Network Topology
 The following diagram illustrates how the main() function initializes the core threads and how those threads subsequently spawn peer handlers 
 
-![Thread Hierarchy and Data Flow](p2p.drawio.svg)
+![Thread Hierarchy and Data Flow](assets/p2p.drawio.svg)
+
+## Project Structure
+```
+p2p-mini/
+│
+├── src/
+│   │
+│   ├── main.c
+│   │
+│   ├── peer/
+│   │   ├── peer.c
+│   │   └── peer.h
+│   │
+│   ├── network/
+│   │   ├── network.c
+│   │   └── network.h
+│   │
+│   ├── protocol/
+│   │   ├── protocol.c
+│   │   └── protocol.h
+│   │
+│   ├── utils/
+│   │   ├── utils.c
+│   │   └── utils.h
+│   │
+│   └── config.h
+│
+├── tests/
+│   ├── test_known_hosts.sh
+│   ├── test_broadcast.sh
+│   ├── test_loop.sh
+│   └── test_framing.sh
+│
+├── assets/
+│
+├── build/
+│
+├── Makefile
+│
+├── README.md
+│
+└── .gitignore
+```
 
 ## How to test
 
 ### Compile 
 
 ```bash
-gcc p2p_node.c -o node -pthread
+gcc -pthread \
+src/main.c \
+src/peer/peer.c \
+src/network/network.c \
+src/protocol/protocol.c \
+-o build/node
 ```
 
 ### Terminal 1
 
 ```bash
-./node 5000
+./build/node 5000
 ```
 ### Terminal 2
 ```bash
-./node 5001 127.0.0.1 5000
+./build/node 5001 127.0.0.1 5000
 ```
 
 ### Terminal 3
 
 ```bash
-./node 5002 127.0.0.1 5000
+./build/node 5002 127.0.0.1 5000
 ```
 
 type something in any terminal:

@@ -2,12 +2,12 @@ echo "test2: test /known_hosts return correct port"
 echo "expected: 127.0.0.1:5001,"
 
 # node A
-./node 5000 &
+./build/node 5000 &
 A=$!
 sleep 1
 
 # node B
-./node 5001 127.0.0.1 5000 &
+./build/node 5001 127.0.0.1 5000 &
 B=$!
 sleep 2
 

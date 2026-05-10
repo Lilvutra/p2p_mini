@@ -1,11 +1,11 @@
 echo "test1: send hello to correct port"
 echo "expected: terminal should show 'Received: Hello:5001' NOT 'Hello:5000'"
 # node A
-./node 5000 &
+./build/node 5000 &
 A=$!
 
 # connect node B to A
-./node 5001 127.0.0.1 5000 &
+./build/node 5001 127.0.0.1 5000 &
 B=$!
 
 # wait for connection to form
