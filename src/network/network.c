@@ -9,6 +9,11 @@
 #include <stdlib.h>
 #include <sys/socket.h>
 #include <stdio.h>
+#include <time.h>
+
+char seen_ids[1000][64]; // store 1000 message ids (passport)
+int seen_head= 0; // where to write next
+int msg_counter = 0;
 
 // Connect to another peer
 void connect_to_peer(char *ip, int port) {
@@ -71,6 +76,20 @@ void parse_n_connect (char *payload) {
     }
 }
 
+int seen_before(char *id) {
+    for (int i = 0; i <1000; i++){
+        if (strcmp(seen_ids[i], id) == 0){
+            return 1;
+        }
+    }
+    return 0;
+}
+
+int mark_seen(char *id) {
+    strncpy(seen_ids[seen_head], id,63);
+    seen_head = (seen_head +1 ) % 1000; // ring buffer
+}
+
 // Handle incoming messages
 void* handle_peer(void *arg) { // each connection gets 1 thread
     int sock = *(int*)arg; // extract socket
@@ -111,7 +130,7 @@ void* handle_peer(void *arg) { // each connection gets 1 thread
             message[msg_len] = '\0';
 
             // Print
-            printf("Received: %s\n", message);
+            //printf("Received: %s\n", message);
             // forward message to others
             if (strncmp(message, "/known_hosts", 12) == 0) {
                 handle_known_hosts(sock);
@@ -123,13 +142,27 @@ void* handle_peer(void *arg) { // each connection gets 1 thread
                 update_peer_port(sock, their_port);
             } else if(strncmp(message, "HOSTS:", 6) == 0){
                 parse_n_connect(message+6); // skip 6 character to get the hosts number only
+            } else if(strncmp(message, "MSG:", 4) == 0){ // handle message with id
+                // message will be: MSG:5001-123-0|hello
+                char *pipe = strchr(message+4, '|');
+                if (pipe == NULL) {
+                    continue;
+                }
+
+                *pipe = '\0';
+                char *id = message+4; // things after : and before |
+                char *text = pipe +1; // things after |
+
+                if (seen_before(id) != 1){
+                    mark_seen(id);
+                    printf("MSG: %s\n", text);
+                    char outgoing[BUFFER_SIZE];
+                    snprintf(outgoing, sizeof(outgoing), "MSG:%s|%s\n", id, text);
+                    broadcast(outgoing, sock);
+                }
             }
-            else {
-                //char outgoing[BUFFER_SIZE];
-                //snprintf(outgoing, sizeof(outgoing), "%s\n", message);
-                //printf("MESSAGE FINAL: %s\n", message);
-                //broadcast(outgoing, sock);
-                broadcast(message, sock);
+            else{
+                printf("WARNING: unknown message: %s\n ", message);
             }
             // Remove processed message from buffer
             int remaining = buffer_len - (msg_len + 1);
@@ -172,8 +205,15 @@ void* input_thread(void *arg) {
     char buffer[BUFFER_SIZE];
 
     while (fgets(buffer, BUFFER_SIZE, stdin)) { // read from keyboard
-        broadcast(buffer, -1); // no sender -> send to ALL
+        buffer[strcspn(buffer,"\n")] = '\0';
+        // gen id
+        char id[64];
+        snprintf(id, sizeof(id), "%d-%ld-%d", my_port, time(NULL), msg_counter);
+        // combine to outgoing msg
+        char outgoing[BUFFER_SIZE + 70];
+        snprintf(outgoing, sizeof(outgoing), "MSG:%s|%s\n",id, buffer);
+        mark_seen(id);
+        broadcast(outgoing, -1); // no sender -> send to ALL
     }
-
     return NULL;
 }
