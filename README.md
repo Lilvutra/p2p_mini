@@ -1,9 +1,25 @@
 # P2P 
 
+## Introduction
 Simple p2p system with each node:
-- listens for peers
-- connects to peers
-- forwards messages
+- listens for peers: receive incoming connections
+- connects to peers: read message and broadcasts to peers.
+- forwards messages: receive message and forwards to other peers
+Each node in the network can send and receive messages directly to other nodes, no central server. If 1 node goes down, the others keep talking.
+
+## How it works
+### Peer discovery
+When a new node connect to 1 node in the network. It will be automatically connect to the nodes that the node in the network has already known.
+
+## Message protocol
+Message follow these format:
+* `Hello:5001` : share listening port after connecting
+* `known_hosts` : request peer list that that node has known
+* `HOSTS: ip:port, ip:port`: known peer list response
+* `MSG:id|text`: chat message with unique id
+
+## Loop prevention
+Assign unique id for each message to prevent infinite message bounce.
 
 ---
 
