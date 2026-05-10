@@ -5,6 +5,7 @@ Simple p2p system with each node:
 - listens for peers: receive incoming connections
 - connects to peers: read message and broadcasts to peers.
 - forwards messages: receive message and forwards to other peers
+
 Each node in the network can send and receive messages directly to other nodes, no central server. If 1 node goes down, the others keep talking.
 
 ## How it works
