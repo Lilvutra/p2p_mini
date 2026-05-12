@@ -17,7 +17,7 @@ C=$!
 sleep 1.5
 
 echo "Asking node 5000 for known_hosts"
-response=$(echo -ne "/known_hosts\n" | nc -q1 127.0.0.1 5000)
+response=$(printf "/known_hosts\n" | nc -w 1 127.0.0.1 5000)
 echo "response: $response"
 
 echo ""
