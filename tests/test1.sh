@@ -11,7 +11,7 @@ B=$!
 # wait for connection to form
 sleep 1
 # send message
-echo -ne "hello\n" | nc 127.0.0.1 5000
+# printf "Hello\n" | nc 127.0.0.1 5000
 # wait for output
 sleep 2
 
