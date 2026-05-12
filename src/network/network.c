@@ -96,18 +96,32 @@ void* handle_peer(void *arg) { // each connection gets 1 thread
     free(arg);
 
     char buffer[BUFFER_SIZE];
+    buffer[0] = '\0';// end of string, buffer is empty create null-terminated string, since first byte is '\0', it means buffer is empty
     char temp_buffer[BUFFER_SIZE]; // temp storage to store message chunk
     int buffer_len = 0; // number of bytes currently in buffer
 
     while (1) {
         // receive temp_buffer
         int temp_bytes = recv(sock, temp_buffer, BUFFER_SIZE - 1, 0); // get incoming message
-        if (temp_bytes <= 0) {
+        printf("[DEBUG] recv: '%s'\n", temp_buffer);
+        printf("[DEBUG] bytes=%d\n", temp_bytes);
+
+        if (temp_bytes < 0) {
+                //printf("Peer disconnected\n");
+                perror("recv failed\n");
+                close(sock);
+                remove_peer(sock);
+                break;
+        }
+
+        // separte case for 0 bytes, because it means peer has closed connection, we should remove this peer from known_hosts and close the socket, then break the loop to end this thread. If we treat it as normal message, it will cause problem because 0 byte is also a valid message (empty message), so we need to handle it separately.
+        if (temp_bytes == 0) {
                 printf("Peer disconnected\n");
                 close(sock);
                 remove_peer(sock);
                 break;
         }
+
         if (buffer_len + temp_bytes >= BUFFER_SIZE) {
             printf("Buffer overflow, resetting...");
             buffer_len = 0;

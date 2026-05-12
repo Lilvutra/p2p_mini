@@ -34,12 +34,17 @@ void handle_known_hosts(int requester_sock){
 
     // loop through each known_hosts
     for (int i = 0; i< peer_count; i++){
+        // except requester itself
+        // if requester is already in known_hosts, it means requester is already connected, so we should not send requester its own ip:port back, otherwise requester will try to connect to itself and cause error. So we should skip requester when building the response.
+        // should we return sth if requester is already in known_hosts? I think we can just return empty list, which means requester is already connected to all known hosts, so there is no new host to connect. So if requester is already in known_hosts, we can just skip requester and return the rest of the known_hosts.
         if (peers[i].sock != requester_sock) {
             // build ip:port then append to response
             char entry[INET_ADDRSTRLEN+6];
             snprintf(entry, sizeof(entry), "%s:%d,",peers[i].ip, peers[i].port );
             strcat(response, entry);
         }
+     
+
     }
     pthread_mutex_unlock(&peers_mutex);
     strcat(response, "\n");

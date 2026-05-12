@@ -16,6 +16,7 @@ void add_peer(int sock, char *ip, int port) {
         peers[peer_count].port = port;
         strcpy(peers[peer_count].ip, ip);
         peer_count++;
+        //there are two messages New peer added when connecting two peers? because each peer will connect to the other, so each peer will print "New peer added" when it receives the connection from the other peer. So if you see two "New peer added" messages, it means both peers have successfully connected to each other.
         printf("New peer added. Total: %d\n", peer_count);
     }
 

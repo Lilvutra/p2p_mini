@@ -1,5 +1,5 @@
 echo "test1: send hello to correct port"
-echo "expected: terminal should show 'Received: Hello:5001' NOT 'Hello:5000'"
+echo "expected: terminal should show 'Received: Hello:5001' NOT 'Hello:5000'\n"
 # node A
 ./build/node 5000 &
 A=$!
