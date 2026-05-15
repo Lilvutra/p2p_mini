@@ -112,3 +112,7 @@ hello world
 ## Test with netcat
 Please refer to the `README.md` file in the `tests` folder.
 
+## Limitation
+* Only work on local 127.x.x.x does not work on public network
+* Have not handle multiple-line messages.
+
