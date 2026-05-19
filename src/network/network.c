@@ -11,6 +11,11 @@
 #include <stdio.h>
 #include <time.h>
 
+typedef struct {
+    int sock;
+    char ip[INET_ADDRSTRLEN];
+} PendingPeer;
+
 char seen_ids[1000][64]; // store 1000 message ids (passport)
 int seen_head= 0; // where to write next
 int msg_counter = 0;
@@ -26,21 +31,22 @@ void connect_to_peer(char *ip, int port) {
     inet_pton(AF_INET, ip, &addr.sin_addr);
 
     if (connect(sock, (struct sockaddr*)&addr, sizeof(addr)) == 0) {
-        printf("Connected to peer %s:%d\n", ip, port);
-
-        add_peer(sock, ip, port);
+        printf("[%d] Connected to peer %s:%d\n", my_port, ip, port);
 
         pthread_t tid;
-        int *psock = malloc(sizeof(int));
-        *psock = sock;
+        PendingPeer *psock = malloc(sizeof(PendingPeer));
+        psock->sock = sock;
+        strncpy(psock->ip, ip, INET_ADDRSTRLEN);
+        psock->ip[INET_ADDRSTRLEN - 1] = '\0';
 
         pthread_create(&tid, NULL, handle_peer, psock);
         pthread_detach(tid);
-        // Hello handshake
+
+        // Hello handshake from client side, we send our port number to peer immediately after connection, so that peer can update our real port in known_hosts, because the port in accept func is ephemeral port which is not useful for other peers to connect to us, so we need to update it to real port after handshake.
         char hello[32];
         snprintf(hello, sizeof(hello), "Hello:%d\n", my_port);
         send(sock, hello, strlen(hello), 0);
-        send(sock,"/known_hosts\n", 13, 0); // send known_hosts to peer
+        send(sock, "/known_hosts\n", 13, 0); // send known_hosts to peer
     } else {
         perror("Connect failed");
         close(sock);
@@ -88,28 +94,48 @@ int seen_before(char *id) {
 int mark_seen(char *id) {
     strncpy(seen_ids[seen_head], id,63);
     seen_head = (seen_head +1 ) % 1000; // ring buffer
+    return 1;
 }
 
 // Handle incoming messages
 void* handle_peer(void *arg) { // each connection gets 1 thread
-    int sock = *(int*)arg; // extract socket
-    free(arg);
+    PendingPeer *peer = arg;
+    int sock = peer->sock; // extract socket
+    char peer_ip[INET_ADDRSTRLEN];
+    strncpy(peer_ip, peer->ip, INET_ADDRSTRLEN);
+    peer_ip[INET_ADDRSTRLEN - 1] = '\0';
+    free(peer);
+
+    int authenticated = 0;
 
     char buffer[BUFFER_SIZE];
+    buffer[0] = '\0';// end of string, buffer is empty create null-terminated string, since first byte is '\0', it means buffer is empty
     char temp_buffer[BUFFER_SIZE]; // temp storage to store message chunk
     int buffer_len = 0; // number of bytes currently in buffer
 
     while (1) {
         // receive temp_buffer
         int temp_bytes = recv(sock, temp_buffer, BUFFER_SIZE - 1, 0); // get incoming message
-        if (temp_bytes <= 0) {
-                printf("Peer disconnected\n");
+        
+        if (temp_bytes < 0) {
+                //printf("Peer disconnected\n");
+                perror("recv failed\n");
                 close(sock);
                 remove_peer(sock);
                 break;
         }
+
+        // separte case for 0 bytes, because it means peer has closed connection, we should remove this peer from known_hosts and close the socket, then break the loop to end this thread. If we treat it as normal message, it will cause problem because 0 byte is also a valid message (empty message), so we need to handle it separately.
+        if (temp_bytes == 0) {
+                printf("[%d] Peer disconnected\n", my_port);
+                close(sock);
+                remove_peer(sock);
+                break;
+        }
+        temp_buffer[temp_bytes] = '\0';   // null-terminate temp_buffer to make it a string for easier processing
+
         if (buffer_len + temp_bytes >= BUFFER_SIZE) {
-            printf("Buffer overflow, resetting...");
+            printf("[%d] Buffer overflow, resetting...\n", my_port);
             buffer_len = 0;
             continue;
         }
@@ -129,8 +155,8 @@ void* handle_peer(void *arg) { // each connection gets 1 thread
             memcpy(message, buffer, msg_len);  // (dest, src, size) - copy 'size' bytes from "src" to "dest"
             message[msg_len] = '\0';
 
-            // Print
-            //printf("Received: %s\n", message);
+            printf("[%d][SOCK %d] recv message: '%s'\n", my_port, sock, message);
+
             // forward message to others
             if (strncmp(message, "/known_hosts", 12) == 0) {
                 handle_known_hosts(sock);
@@ -138,8 +164,14 @@ void* handle_peer(void *arg) { // each connection gets 1 thread
             } else if(strncmp(message, "Hello:", 6) == 0){
                 // extract port number from "Hello:5001"
                 int their_port = atoi(message +6);
-                //update this peer's port in peers[]
-                update_peer_port(sock, their_port);
+                if (!authenticated) {
+                    add_peer(sock, peer_ip, their_port);
+                    authenticated = 1;
+                } else {
+                    update_peer_port(sock, their_port);
+                }
+            } else if(!authenticated) {
+                printf("[%d][WARN] ignoring unauthenticated message before handshake: %s\n", my_port, message);
             } else if(strncmp(message, "HOSTS:", 6) == 0){
                 parse_n_connect(message+6); // skip 6 character to get the hosts number only
             } else if(strncmp(message, "MSG:", 4) == 0){ // handle message with id
@@ -162,7 +194,7 @@ void* handle_peer(void *arg) { // each connection gets 1 thread
                 }
             }
             else{
-                printf("WARNING: unknown message: %s\n ", message);
+                printf("[%d] WARNING: unknown message: %s\n", my_port, message);
             }
             // Remove processed message from buffer
             int remaining = buffer_len - (msg_len + 1);
@@ -188,12 +220,17 @@ void* server_thread(void *arg) {
 
         char client_ip[INET_ADDRSTRLEN];
         inet_ntop(AF_INET, &client_addr.sin_addr, client_ip, INET_ADDRSTRLEN); // extract ip
-        int client_port = ntohs(client_addr.sin_port); // extract port
-        add_peer(client_fd, client_ip, client_port);
+
+        // Send local handshake immediately and register peer only after we receive their Hello.
+        char hello[32];
+        snprintf(hello, sizeof(hello), "Hello:%d\n", my_port);
+        send(client_fd, hello, strlen(hello), 0);
 
         pthread_t tid;
-        int *pclient = malloc(sizeof(int));
-        *pclient = client_fd;
+        PendingPeer *pclient = malloc(sizeof(PendingPeer));
+        pclient->sock = client_fd;
+        strncpy(pclient->ip, client_ip, INET_ADDRSTRLEN);
+        pclient->ip[INET_ADDRSTRLEN - 1] = '\0';
 
         pthread_create(&tid, NULL, handle_peer, pclient); // create thread for that peer
         pthread_detach(tid);

@@ -1,5 +1,5 @@
 echo "test1: send hello to correct port"
-echo "expected: terminal should show 'Received: Hello:5001' NOT 'Hello:5000'"
+echo "expected: terminal should show 'Received: Hello:5001' NOT 'Hello:5000'\n"
 # node A
 ./build/node 5000 &
 A=$!
@@ -11,7 +11,7 @@ B=$!
 # wait for connection to form
 sleep 1
 # send message
-echo -ne "hello\n" | nc 127.0.0.1 5000
+# printf "Hello\n" | nc 127.0.0.1 5000
 # wait for output
 sleep 2
 
