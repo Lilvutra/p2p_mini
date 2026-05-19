@@ -8,13 +8,14 @@
 #define MAX_PEERS 100
 #define BUFFER_SIZE 1024
 
-int peers[MAX_PEERS];
-int peer_count = 0;
+// Shared memory
+int peers[MAX_PEERS]; // list of connected sockets
+int peer_count = 0;  // number of peers
 
-pthread_mutex_t peers_mutex;
+pthread_mutex_t peers_mutex; // protects access
 
 // Direct TCP P2P connection
-// Real-time messaging and multi=peer broadcasting
+// Real-time messaging and multi-peer broadcasting
 
 // Current to-do:
 // Look into the code more clearly to possible detect fault logic
@@ -63,8 +64,8 @@ void broadcast(char *msg, int sender_sock) {
     for (int i = 0; i < peer_count; i++) {
         int sock = peers[i];
 
-        if (sock != sender_sock) {
-            send(sock, msg, strlen(msg), 0);
+        if (sock != sender_sock) { // except sender
+            send(sock, msg, strlen(msg), 0); // send raw message
         }
     }
 
@@ -72,38 +73,66 @@ void broadcast(char *msg, int sender_sock) {
 }
 
 // Handle incoming messages
-void* handle_peer(void *arg) {
-    int sock = *(int*)arg;
+void* handle_peer(void *arg) { // each connection gets 1 thread
+    int sock = *(int*)arg; // extract socket
     free(arg);
 
     char buffer[BUFFER_SIZE];
+    char temp_buffer[BUFFER_SIZE]; // temp storage to store message chunk
+    int buffer_len = 0; // number of bytes currently in buffer
 
     while (1) {
-        int bytes = recv(sock, buffer, BUFFER_SIZE - 1, 0);
-
-        if (bytes <= 0) {
-            printf("Peer disconnected\n");
-            close(sock);
-            remove_peer(sock);
-            break;
+        // receive temp_buffer
+        int temp_bytes = recv(sock, temp_buffer, BUFFER_SIZE - 1, 0); // get incoming message
+        if (temp_bytes <= 0) {
+                printf("Peer disconnected\n");
+                close(sock);
+                remove_peer(sock);
+                break;
+        }
+        if (buffer_len + temp_bytes >= BUFFER_SIZE) {
+            printf("Buffer overflow, resetting...");
+            buffer_len = 0;
+            continue;
         }
 
-        buffer[bytes] = '\0';
-        printf("Received: %s", buffer);
+        // append temp_buffer to buffer
+        memcpy(buffer + buffer_len, temp_buffer, temp_bytes);  // (dest, src, size)
+        buffer_len += temp_bytes;
+        buffer[buffer_len] = '\0';  // null terminator
 
-        // forward message to others
-        broadcast(buffer, sock);
+        // while buffer contains '\n': extract 1 message, process it , remove it from buffer
+        while (strchr(buffer, '\n')){
+            char *newline = strchr(buffer, '\n'); // address of '\n' inside buffer
+            int msg_len = newline - buffer;  // (address of newline) - (start of buffer)
+            
+            // Extract message
+            char message[BUFFER_SIZE];
+            memcpy(message, buffer, msg_len);  // (dest, src, size) - copy 'size' bytes from "src" to "dest"
+            message[msg_len] = '\0';
+
+            // Print
+            printf("Received: %s\n", message);
+            // forward message to others
+            broadcast(buffer, sock);
+
+            // Remove processed message from buffer
+            int remaining = buffer_len - (msg_len + 1);
+            memmove(buffer, newline + 1, remaining);
+
+            buffer_len = remaining;
+            buffer[buffer_len] = '\0';
+        }
     }
-
     return NULL;
 }
 
 // Accept incoming connections
 void* server_thread(void *arg) {
-    int server_fd = *(int*)arg;
+    int server_fd = *(int*)arg; // get server socket
 
     while (1) {
-        int client_fd = accept(server_fd, NULL, NULL);
+        int client_fd = accept(server_fd, NULL, NULL); // accept connection
 
         if (client_fd < 0) continue;
 
@@ -113,7 +142,7 @@ void* server_thread(void *arg) {
         int *pclient = malloc(sizeof(int));
         *pclient = client_fd;
 
-        pthread_create(&tid, NULL, handle_peer, pclient);
+        pthread_create(&tid, NULL, handle_peer, pclient); // create thread for that peer
         pthread_detach(tid);
     }
 }
@@ -122,8 +151,8 @@ void* server_thread(void *arg) {
 void* input_thread(void *arg) {
     char buffer[BUFFER_SIZE];
 
-    while (fgets(buffer, BUFFER_SIZE, stdin)) {
-        broadcast(buffer, -1);
+    while (fgets(buffer, BUFFER_SIZE, stdin)) { // read from keyboard
+        broadcast(buffer, -1); // no sender -> send to ALL
     }
 
     return NULL;
@@ -131,8 +160,9 @@ void* input_thread(void *arg) {
 
 // Connect to another peer
 void connect_to_peer(char *ip, int port) {
-    int sock = socket(AF_INET, SOCK_STREAM, 0);
+    int sock = socket(AF_INET, SOCK_STREAM, 0); // create socket
 
+    // set up address
     struct sockaddr_in addr;
     addr.sin_family = AF_INET;
     addr.sin_port = htons(port);
@@ -167,14 +197,25 @@ int main(int argc, char *argv[]) {
     pthread_mutex_init(&peers_mutex, NULL);
 
     // Create server socket
-    int server_fd = socket(AF_INET, SOCK_STREAM, 0); // 
+    int server_fd = socket(AF_INET, SOCK_STREAM, 0); // (domain, type, protocol)
+
+    // config socket
+    // enable port reused
+    int opt = 1;
+    setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)); //(socket, level, option, value_ptr, pass)
 
     struct sockaddr_in server_addr;
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_port = htons(port);
-    server_addr.sin_addr.s_addr = INADDR_ANY;
+    // clear memory (fill block with 0 to avoid garbage memory)
+    memset(&server_addr, 0, sizeof(server_addr)); // (pointer, value, size)
+    server_addr.sin_family = AF_INET; // address type
+    server_addr.sin_port = htons(port); // port number
+    server_addr.sin_addr.s_addr = INADDR_ANY; // IP address
 
-    bind(server_fd, (struct sockaddr*)&server_addr, sizeof(server_addr));
+    // attach socket to port
+    if (bind(server_fd, (struct sockaddr*)&server_addr, sizeof(server_addr)) <0) {
+        perror("Bind failed");
+        exit(1);
+    };
     listen(server_fd, 10);
 
     printf("Node listening on port %d\n", port);
